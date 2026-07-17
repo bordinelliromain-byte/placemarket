@@ -1,8 +1,9 @@
 // src/app/api/verify-document/route.ts
 // ═════════════════════════════════════════════════════════════
-// PULSEMARKET — API Verify Document (v2 — OpenAI GPT-4o Vision)
-// Vérifie les documents uploadés (Kbis, RC Pro, assurance) via GPT-4o
-// Migré depuis Google Cloud Vision (403 billing) vers OpenAI.
+// PULSEMARKET — API Verify Document (v3 — OpenAI, sans rendu PDF→image)
+// PDF : extraction de texte pur (unpdf, zéro dépendance canvas/DOMMatrix,
+//       fiable en serverless Vercel) → analysé par GPT-4o en mode texte.
+// Images (JPEG/PNG/WEBP) : envoyées directement à GPT-4o Vision.
 // ═════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -14,6 +15,10 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
 const ALLOWED_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
 const ALLOWED_DOC_TYPES = ['kbis', 'assurance', 'rc-pro', 'attestation', 'piece-identite']
+
+// Seuil en dessous duquel on considère que le PDF n'a pas de vraie couche
+// texte exploitable (probablement un scan/photo collé dans un PDF)
+const MIN_PDF_TEXT_LENGTH = 30
 
 // ─── Magic bytes (signatures de fichiers) — anti spoof MIME ───
 const MAGIC_BYTES: Record<string, number[][]> = {
@@ -47,15 +52,12 @@ function similarity(a: string, b: string): number {
   return w1.filter(w => w2.includes(w)).length / Math.max(w1.length, w2.length)
 }
 
-// ─── Convertit un PDF (1ère page) en image PNG base64 ───
-// Utilise pdf-to-img (pdfium WASM) — compatible serverless/Vercel, pas de binaire natif
-async function pdfFirstPageToBase64(buffer: Buffer): Promise<string> {
-  const { pdf } = await import('pdf-to-img')
-  const document = await pdf(buffer, { scale: 2 })
-  for await (const pageBuffer of document) {
-    return pageBuffer.toString('base64')
-  }
-  throw new Error('PDF vide ou illisible')
+// ─── Extrait le texte brut d'un PDF (sans rendu image — pas de canvas/DOMMatrix) ───
+async function extractPdfText(buffer: Buffer): Promise<string> {
+  const { extractText, getDocumentProxy } = await import('unpdf')
+  const pdf = await getDocumentProxy(new Uint8Array(buffer))
+  const { text } = await extractText(pdf, { mergePages: true })
+  return (text || '').trim()
 }
 
 // ═════════════════════════════════════════════════════════════
@@ -87,7 +89,7 @@ const EXTRACTION_JSON_SCHEMA = {
       confidence: {
         type: 'string',
         enum: ['high', 'medium', 'low'],
-        description: 'Confiance globale dans l\'extraction (qualité image, ambiguïté du document)',
+        description: 'Confiance globale dans l\'extraction (qualité du texte/image, ambiguïté du document)',
       },
     },
     required: [
@@ -96,6 +98,43 @@ const EXTRACTION_JSON_SCHEMA = {
     ],
     additionalProperties: false,
   },
+}
+
+const SYSTEM_PROMPT = (todayISO: string) => `Tu es un assistant de vérification documentaire pour une plateforme B2B (PulseMarket) qui valide les documents professionnels d'exposants de marchés municipaux (Kbis, attestations d'assurance RC Pro, etc.).
+
+Aujourd'hui nous sommes le ${todayISO}. Utilise cette date pour déterminer si un document est encore valide.
+
+Règles strictes :
+- N'invente JAMAIS une date, un SIREN ou un nom si tu ne les vois pas clairement dans le contenu fourni. Mets null plutôt que de deviner.
+- Un Kbis n'a généralement pas de date d'expiration propre — pour ce type de document, is_currently_valid doit être null sauf mention explicite de validité, et on se base plutôt sur la fraîcheur de l'issue_date.
+- Une attestation d'assurance a presque toujours une date de fin de validité explicite — cherche-la précisément.
+- Si le contenu est vide, incohérent ou manifestement pas un document professionnel, mets readable: false et confidence: "low", et laisse les autres champs à null quand tu n'es pas sûr.
+- Sois honnête sur ton niveau de confiance.`
+
+async function callOpenAIExtraction(messages: any[]): Promise<any> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 25000)
+
+  let res: Response
+  try {
+    res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        temperature: 0,
+        messages,
+        response_format: { type: 'json_schema', json_schema: EXTRACTION_JSON_SCHEMA },
+      }),
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timeout)
+  }
+  return res
 }
 
 // ═════════════════════════════════════════════════════════════
@@ -157,81 +196,59 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Fichier corrompu ou type incorrect (MIME spoofing detected)' }, { status: 400 })
     }
 
-    // ─── 7. Préparer l'image pour GPT-4o Vision (convertir PDF si besoin) ───
-    let imageBase64: string
-    let imageMimeForOpenAI: string
+    const todayISO = new Date().toISOString().split('T')[0]
+    let openaiMessages: any[]
 
+    // ─── 7a. CAS PDF — extraction texte pur (pas de rendu image) ───
     if (file.type === 'application/pdf') {
+      let pdfText: string
       try {
-        imageBase64 = await pdfFirstPageToBase64(Buffer.from(arrayBuffer))
-        imageMimeForOpenAI = 'image/png'
+        pdfText = await extractPdfText(Buffer.from(arrayBuffer))
       } catch (pdfErr: any) {
-        console.error('[verify-document] PDF conversion error:', pdfErr.message)
-        return NextResponse.json({ error: 'Impossible de lire ce PDF (page 1 illisible)' }, { status: 400 })
+        console.error('[verify-document] PDF text extraction error:', pdfErr.message)
+        return NextResponse.json({ error: 'Impossible de lire ce PDF' }, { status: 400 })
       }
-    } else {
-      imageBase64 = Buffer.from(arrayBuffer).toString('base64')
-      imageMimeForOpenAI = file.type
+
+      // Si trop peu de texte extrait, c'est probablement un scan/photo sans couche texte
+      if (pdfText.length < MIN_PDF_TEXT_LENGTH) {
+        return NextResponse.json({
+          success: false,
+          error: 'Ce PDF semble être un scan/image sans texte exploitable. Merci de le renvoyer au format JPG ou PNG (photo du document).',
+          score: 0,
+          checks: {},
+        }, { status: 200 })
+      }
+
+      openaiMessages = [
+        { role: 'system', content: SYSTEM_PROMPT(todayISO) },
+        {
+          role: 'user',
+          content: `Analyse ce document (type déclaré par l'utilisateur : ${docType || 'non précisé'}). Voici le texte extrait du PDF :\n\n---\n${pdfText.substring(0, 8000)}\n---\n\nExtrais les informations selon le schéma demandé.`,
+        },
+      ]
+    }
+    // ─── 7b. CAS IMAGE — envoi direct à GPT-4o Vision ───
+    else {
+      const imageBase64 = Buffer.from(arrayBuffer).toString('base64')
+      openaiMessages = [
+        { role: 'system', content: SYSTEM_PROMPT(todayISO) },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: `Analyse ce document (type déclaré par l'utilisateur : ${docType || 'non précisé'}). Extrais les informations selon le schéma demandé.` },
+            { type: 'image_url', image_url: { url: `data:${file.type};base64,${imageBase64}` } },
+          ],
+        },
+      ]
     }
 
-    // ─── 8. Appel OpenAI GPT-4o Vision avec extraction structurée ───
-    const todayISO = new Date().toISOString().split('T')[0]
-
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 25000) // 25s max (vision + reasoning)
-
+    // ─── 8. Appel OpenAI ───
     let openaiRes: Response
     try {
-      openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          temperature: 0,
-          messages: [
-            {
-              role: 'system',
-              content: `Tu es un assistant de vérification documentaire pour une plateforme B2B (PulseMarket) qui valide les documents professionnels d'exposants de marchés municipaux (Kbis, attestations d'assurance RC Pro, etc.).
-
-Aujourd'hui nous sommes le ${todayISO}. Utilise cette date pour déterminer si un document est encore valide.
-
-Règles strictes :
-- N'invente JAMAIS une date, un SIREN ou un nom si tu ne les vois pas clairement sur le document. Mets null plutôt que de deviner.
-- Un Kbis n'a généralement pas de date d'expiration propre — pour ce type de document, is_currently_valid doit être null sauf mention explicite de validité, et on se base plutôt sur la fraîcheur de l'issue_date.
-- Une attestation d'assurance a presque toujours une date de fin de validité explicite — cherche-la précisément.
-- Si le document est flou, mal cadré, ou illisible, mets readable: false et confidence: "low", et laisse les autres champs à null quand tu n'es pas sûr.
-- Sois honnête sur ton niveau de confiance.`,
-            },
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: `Analyse ce document (type déclaré par l'utilisateur : ${docType || 'non précisé'}). Extrais les informations selon le schéma demandé.`,
-                },
-                {
-                  type: 'image_url',
-                  image_url: { url: `data:${imageMimeForOpenAI};base64,${imageBase64}` },
-                },
-              ],
-            },
-          ],
-          response_format: {
-            type: 'json_schema',
-            json_schema: EXTRACTION_JSON_SCHEMA,
-          },
-        }),
-        signal: controller.signal,
-      })
+      openaiRes = await callOpenAIExtraction(openaiMessages)
     } catch (fetchErr: any) {
-      clearTimeout(timeout)
       console.error('[verify-document] OpenAI fetch error:', fetchErr.message)
       return NextResponse.json({ error: 'Service IA temporairement indisponible' }, { status: 503 })
-    } finally {
-      clearTimeout(timeout)
     }
 
     if (!openaiRes.ok) {
@@ -266,7 +283,7 @@ Règles strictes :
     }
     try {
       extraction = JSON.parse(rawContent)
-    } catch (e) {
+    } catch {
       console.error('[verify-document] Extraction JSON parse error:', rawContent?.substring(0, 300))
       return NextResponse.json({ success: false, error: 'Extraction IA illisible', score: 0, checks: {} })
     }
@@ -281,7 +298,7 @@ Règles strictes :
       })
     }
 
-    // ─── 9. Checks de validation (même logique métier qu'avant, sourcée par l'IA) ───
+    // ─── 9. Checks de validation ───
     const extractedSiren = extraction.siren ? extraction.siren.replace(/\s/g, '') : null
     const extractedBusinessName = extraction.business_name
 
@@ -294,7 +311,6 @@ Règles strictes :
       ? similarity(userBusinessName, extractedBusinessName) > 0.6
       : extractedBusinessName !== null
 
-    // Validité : si l'IA a un verdict explicite, on le suit ; sinon on retombe sur la fraîcheur (< 90 jours)
     if (extraction.is_currently_valid !== null) {
       checks.notExpired = extraction.is_currently_valid
     } else if (extraction.issue_date) {
@@ -307,7 +323,7 @@ Règles strictes :
 
     checks.crossValid = otherDocText && extractedBusinessName
       ? (
-        similarity(extractedBusinessName, otherDocText) > 0.3 // approximation simple, texte libre
+        similarity(extractedBusinessName, otherDocText) > 0.3
         || (extractedSiren !== null && otherDocText.replace(/\s/g, '').includes(extractedSiren))
       )
       : true
