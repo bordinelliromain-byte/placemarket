@@ -215,6 +215,25 @@ function AuthOrganisateurForm() {
       justificatif_url: justificatifUrl,
     }).eq('id', authData.user.id)
 
+    // 5. ✅ Notifier l'admin (romain@pulse-market.fr) qu'une nouvelle mairie attend validation
+    // Ne bloque jamais l'inscription même si l'envoi échoue.
+    try {
+      await fetch('/api/notify-new-mairie', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orgName,
+          orgType,
+          siret: siretClean,
+          email,
+          justificatifName: justificatif?.name,
+          userId: authData.user.id,
+        }),
+      })
+    } catch (e) {
+      console.error('Admin notification failed:', e)
+    }
+
     setLoading(false)
     setPendingScreen(true)
   }
