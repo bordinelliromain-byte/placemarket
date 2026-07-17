@@ -104,6 +104,9 @@ export default function DevisPage() {
     message: '',
   })
 
+  // ✅ Honeypot anti-bot — doit rester vide, les bots le remplissent souvent
+  const [website, setWebsite] = useState('')
+
   const price = calculatePrice(data)
   const progress = (step / 5) * 100
 
@@ -142,16 +145,16 @@ export default function DevisPage() {
         status: 'new',
       }
 
-      // 1. Save Supabase
+      // 1. Save Supabase (payload SANS le honeypot — pas de colonne "website" dans devis_requests)
       const { error } = await supabase.from('devis_requests').insert(payload)
       if (error) console.error('Supabase error:', error)
 
-      // 2. ✅ Send email notification (ne bloque pas si fail)
+      // 2. ✅ Send email notification AVEC le honeypot (l'API notify-devis le vérifie)
       try {
         await fetch('/api/notify-devis', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ ...payload, website }),
         })
       } catch (e) {
         console.error('Email notification failed:', e)
@@ -475,6 +478,20 @@ export default function DevisPage() {
                         style={{ width: '100%', padding: '11px 14px', border: '1px solid #E2E8F0', borderRadius: 9, fontSize: 14, color: '#0F172A', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }}
                         onFocus={e => e.target.style.borderColor = BRAND}
                         onBlur={e => e.target.style.borderColor = '#E2E8F0'} />
+                    </div>
+
+                    {/* ✅ Honeypot anti-bot — invisible pour un humain, visible/rempli par les bots */}
+                    <div style={{ position: 'absolute', left: '-9999px', width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true">
+                      <label htmlFor="website">Ne pas remplir ce champ</label>
+                      <input
+                        type="text"
+                        id="website"
+                        name="website"
+                        value={website}
+                        onChange={e => setWebsite(e.target.value)}
+                        tabIndex={-1}
+                        autoComplete="off"
+                      />
                     </div>
 
                     <div style={{ background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: 10, padding: 14, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
