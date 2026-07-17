@@ -228,18 +228,18 @@ export default function Parametres() {
 
   // ✅ VRAIE SUPPRESSION DU COMPTE
   const handleDeleteAccount = async () => {
-    if (deleteConfirmText !== 'SUPPRIMER') {
-      setMessage({ type: 'error', text: 'Veuillez taper "SUPPRIMER" pour confirmer' })
+    if (deleteConfirmText !== 'SUPPRIMER MON COMPTE') {
+      setMessage({ type: 'error', text: 'Veuillez taper "SUPPRIMER MON COMPTE" pour confirmer' })
       return
     }
     setDeletingAccount(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      // ⚠️ L'API récupère l'userId depuis la session serveur (fix de la faille du jour 19) —
+      // on n'envoie plus userId dans le body, seulement la confirmation textuelle
       const res = await fetch('/api/delete-account', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id })
+        body: JSON.stringify({ confirmation: deleteConfirmText })
       })
       const { success, error } = await res.json()
       if (error) throw new Error(error)
@@ -554,18 +554,18 @@ export default function Parametres() {
                     </div>
                   </div>
                   <label style={{ fontSize: 11, fontWeight: 600, color: '#DC2626', display: 'block', marginBottom: 6 }}>
-                    Tapez <strong>SUPPRIMER</strong> pour confirmer
+                    Tapez <strong>SUPPRIMER MON COMPTE</strong> pour confirmer
                   </label>
                   <input value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)}
-                    placeholder="SUPPRIMER"
+                    placeholder="SUPPRIMER MON COMPTE"
                     style={{ width: '100%', padding: '9px 12px', border: '1px solid #FECACA', borderRadius: 8, fontSize: 13, color: '#0F172A', background: 'white', outline: 'none', boxSizing: 'border-box', marginBottom: 12 }} />
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText('') }}
                       style={{ flex: 1, background: 'white', color: '#64748B', border: '1px solid #E2E8F0', borderRadius: 8, padding: '9px 0', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                       Annuler
                     </button>
-                    <button onClick={handleDeleteAccount} disabled={deletingAccount || deleteConfirmText !== 'SUPPRIMER'}
-                      style={{ flex: 2, background: deleteConfirmText === 'SUPPRIMER' ? '#DC2626' : '#F1F5F9', color: deleteConfirmText === 'SUPPRIMER' ? 'white' : '#94A3B8', border: 'none', borderRadius: 8, padding: '9px 0', fontSize: 12, fontWeight: 700, cursor: deleteConfirmText === 'SUPPRIMER' && !deletingAccount ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                    <button onClick={handleDeleteAccount} disabled={deletingAccount || deleteConfirmText !== 'SUPPRIMER MON COMPTE'}
+                      style={{ flex: 2, background: deleteConfirmText === 'SUPPRIMER MON COMPTE' ? '#DC2626' : '#F1F5F9', color: deleteConfirmText === 'SUPPRIMER MON COMPTE' ? 'white' : '#94A3B8', border: 'none', borderRadius: 8, padding: '9px 0', fontSize: 12, fontWeight: 700, cursor: deleteConfirmText === 'SUPPRIMER MON COMPTE' && !deletingAccount ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                       {deletingAccount ? <><Loader size={12} style={{ animation: 'spin 0.8s linear infinite' }} /> Suppression...</> : 'Confirmer la suppression'}
                     </button>
                   </div>
