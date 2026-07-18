@@ -1,7 +1,10 @@
 // src/app/api/admin/approve-mairie/route.ts
 // ═════════════════════════════════════════════════════════════
 // PULSEMARKET — Approbation/refus d'une mairie en attente
-// Passe organisateur_status + envoie l'email correspondant.
+// Passe organisateur_status + confirme l'email automatiquement
+// (évite le piège : mairie approuvée mais bloquée à la connexion
+// car elle n'a jamais cliqué son lien de confirmation) + envoie
+// l'email correspondant.
 // ═════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -52,6 +55,21 @@ export async function POST(req: NextRequest) {
     if (updateError) {
       console.error('[admin/approve-mairie] Update error:', updateError)
       return NextResponse.json({ error: 'Erreur mise à jour' }, { status: 500 })
+    }
+
+    // ─── ✅ Confirme automatiquement l'email si on approuve ───
+    // Évite le piège : mairie validée métier mais bloquée à la connexion
+    // car elle n'a jamais cliqué son lien de confirmation d'email.
+    if (action === 'approve') {
+      const { error: confirmError } = await supabase.auth.admin.updateUserById(userId, {
+        email_confirm: true,
+      })
+      if (confirmError) {
+        // On ne bloque pas l'approbation pour ça, mais on le log —
+        // si ça échoue, la mairie restera bloquée à la connexion tant
+        // qu'elle n'aura pas cliqué son lien elle-même.
+        console.error('[admin/approve-mairie] Email auto-confirm failed:', confirmError)
+      }
     }
 
     const displayName = profile.organisation_name || profile.full_name || ''
