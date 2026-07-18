@@ -1,7 +1,7 @@
 // src/app/whatmarket/page.tsx
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion'
 
 type Market = {
@@ -10,21 +10,24 @@ type Market = {
   total_spots: number; available_spots: number; exposants_count?: number; distance?: number; sponsored?: boolean
 }
 type GeoStatus = 'idle' | 'requesting' | 'ok' | 'denied'
-type VedetteData = { nom: string; offre: string; stand: string } | null
 type BonPlan = { nom: string; offre: string; detail: string; adresse: string; photo_url: string }
-type Exposant = { business_name: string; category: string | null; photo_url: string | null; ville: string | null; slug: string | null }
+type BoostExposant = { nom: string; offre: string; stand: string; photo_url: string }
+type ExposantRow = { business_name: string; category: string | null; produits: string | null; photo_url: string | null; spot_label: string | null }
 
 // ── Design tokens « Airbnb-like » ──────────────────────────────────────
 const T = {
   accent: '#0EA5E9',
   accentSoft: 'rgba(14,165,233,0.08)',
   accentBorder: 'rgba(14,165,233,0.25)',
+  gold: '#B8860B',
+  goldSoft: '#FDF6E3',
   bg: '#F8F9FA',
   card: '#FFFFFF',
   ink: '#12151A',
   body: '#5B6270',
   muted: '#9AA1AB',
   border: '#ECEDF0',
+  divider: '#F0F1F3',
   sans: "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
   radius: 24,
   radiusSm: 16,
@@ -37,40 +40,19 @@ const T = {
 
 // ── Icônes ────────────────────────────────────────────────────────────
 function IconShop({ color = T.muted, size = 20 }: { color?: string; size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-    </svg>
-  )
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
 }
-function IconStar({ color = T.accent, size = 16 }: { color?: string; size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke="none">
-      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-    </svg>
-  )
+function IconStar({ color = T.accent, size = 16, filled = true }: { color?: string; size?: number; filled?: boolean }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? color : 'none'} stroke={filled ? 'none' : color} strokeWidth="1.6"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
 }
 function IconPin({ color = 'white', size = 12 }: { color?: string; size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
-    </svg>
-  )
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
 }
 function IconSend({ color = 'white', size = 12 }: { color?: string; size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="3 11 22 2 13 21 11 13 3 11"/>
-    </svg>
-  )
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
 }
 function IconShare({ color = T.body, size = 13 }: { color?: string; size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-    </svg>
-  )
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
 }
 function IconChevron({ color = 'white', size = 14 }: { color?: string; size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
@@ -78,18 +60,25 @@ function IconChevron({ color = 'white', size = 14 }: { color?: string; size?: nu
 function IconClose({ color = T.ink, size = 16 }: { color?: string; size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
 }
+function IconTag({ color = T.muted, size = 13 }: { color?: string; size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41L13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+}
 
-// ── Bandeau de section : label discret + titre bold ────────────────────
 function SectionHead({ eyebrow, title, aside }: { eyebrow: string; title: string; aside?: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, marginBottom: 18 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, marginBottom: 16 }}>
       <div>
         <p style={{ fontFamily: T.sans, fontSize: 12, fontWeight: 500, color: T.muted, marginBottom: 4, letterSpacing: '0.01em' }}>{eyebrow}</p>
-        <h3 style={{ fontFamily: T.sans, fontSize: 20, fontWeight: 700, color: T.ink, letterSpacing: '-0.01em', lineHeight: 1.25 }}>{title}</h3>
+        <h3 style={{ fontFamily: T.sans, fontSize: 19, fontWeight: 700, color: T.ink, letterSpacing: '-0.01em', lineHeight: 1.25 }}>{title}</h3>
       </div>
       {aside}
     </div>
   )
+}
+
+// Séparateur très léger entre sections
+function Divider() {
+  return <div style={{ height: 1, background: T.divider, margin: `${T.stack}px 0` }} />
 }
 
 function haversine(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -136,7 +125,6 @@ const REGIONS = [
   { id: 'cvl', label: 'Centre-Val de Loire', dept: '45' },
 ]
 
-// ── Effet « lift » partagé par les cartes flottantes ───────────────────
 const liftIn = (e: React.MouseEvent<HTMLElement>) => {
   e.currentTarget.style.transform = 'translateY(-4px)'
   e.currentTarget.style.boxShadow = T.shadowCardHover
@@ -147,10 +135,11 @@ const liftOut = (e: React.MouseEvent<HTMLElement>) => {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Recommandations locales — fondues dans le flux, jamais des bannières
+// SECTION 2 — « Bons Plans du Quartier » — pubs commerçants (boost_ads)
+// UI magazine, horizontale, épurée : photo + offre + bouton "Voir"
 // ═══════════════════════════════════════════════════════════════════════
-function LocalRecommendations({ marketId }: { marketId: string }) {
-  const [bonsPlans, setBonsPlans] = useState<BonPlan[]>([])
+function BonsPlansQuartier({ marketId }: { marketId: string }) {
+  const [items, setItems] = useState<BonPlan[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -161,10 +150,9 @@ function LocalRecommendations({ marketId }: { marketId: string }) {
         const { data } = await supabase.from('boost_ads')
           .select('nom, offre, detail, adresse, photo_url')
           .eq('event_id', marketId).eq('status', 'active')
-          .order('created_at', { ascending: false }).limit(6)
-        if (data) setBonsPlans(data.map((item: any) => ({
-          nom: item.nom, offre: item.offre, detail: item.detail || '',
-          adresse: item.adresse || '', photo_url: item.photo_url || '',
+          .order('created_at', { ascending: false }).limit(8)
+        if (data) setItems(data.map((i: any) => ({
+          nom: i.nom, offre: i.offre, detail: i.detail || '', adresse: i.adresse || '', photo_url: i.photo_url || '',
         })))
       } catch (err) {}
       setLoading(false)
@@ -172,39 +160,29 @@ function LocalRecommendations({ marketId }: { marketId: string }) {
     load()
   }, [marketId])
 
-  const handleShare = () => {
-    if (navigator.share) {
-      navigator.share({ title: 'Bons plans du marché — Whatmarket', text: "Découvrez les commerces recommandés près de ce marché !", url: window.location.href })
-    } else { navigator.clipboard?.writeText(window.location.href) }
-  }
-
-  if (loading || bonsPlans.length === 0) return null
+  if (loading || items.length === 0) return null
   return (
-    <section style={{ marginBottom: T.stack }}>
-      <SectionHead
-        eyebrow="Recommandé près d'ici"
-        title="Commerces locaux"
-        aside={
-          <button onClick={handleShare}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: 'none', cursor: 'pointer', padding: 6 }}>
-            <IconShare size={14} color={T.body} />
-          </button>
-        }
-      />
+    <section>
+      <SectionHead eyebrow="Partenaires · Sponsorisé" title="Bons plans du quartier" />
       <div style={{ display: 'flex', gap: 14, overflowX: 'auto', scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch', margin: `0 -${T.gutter}px`, padding: `2px ${T.gutter}px 6px` }}>
-        {bonsPlans.map((plan, i) => (
-          <a key={i} href={plan.adresse ? `https://www.google.com/maps/search/${encodeURIComponent(plan.adresse)}` : '#'}
-            target="_blank" rel="noopener noreferrer"
-            style={{ scrollSnapAlign: 'start', flexShrink: 0, width: 176, textDecoration: 'none', display: 'block' }}>
-            <div style={{ height: 132, borderRadius: T.radiusSm, overflow: 'hidden', marginBottom: 10, background: T.border, boxShadow: T.shadowCard }}>
+        {items.map((plan, i) => (
+          <div key={i} style={{ scrollSnapAlign: 'start', flexShrink: 0, width: 200, background: T.card, borderRadius: T.radiusSm, overflow: 'hidden', boxShadow: T.shadowCard }}>
+            <div style={{ height: 110, background: T.border }}>
               {plan.photo_url
                 ? <img src={plan.photo_url} alt={plan.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><IconShop size={26} /></div>
+                : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><IconShop size={22} /></div>
               }
             </div>
-            <p style={{ fontFamily: T.sans, fontSize: 14, fontWeight: 600, color: T.ink, lineHeight: 1.35, marginBottom: 3 }}>{plan.nom}</p>
-            <p style={{ fontFamily: T.sans, fontSize: 12.5, fontWeight: 400, color: T.muted, lineHeight: 1.5 }}>{plan.offre}</p>
-          </a>
+            <div style={{ padding: '13px 14px 15px' }}>
+              <p style={{ fontFamily: T.sans, fontSize: 13.5, fontWeight: 700, color: T.ink, lineHeight: 1.3, marginBottom: 3 }}>{plan.nom}</p>
+              <p style={{ fontFamily: T.sans, fontSize: 12, fontWeight: 400, color: T.body, lineHeight: 1.45, marginBottom: 11, minHeight: 17 }}>{plan.offre}</p>
+              <a href={plan.adresse ? `https://www.google.com/maps/search/${encodeURIComponent(plan.adresse)}` : '#'}
+                target="_blank" rel="noopener noreferrer"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: T.sans, fontSize: 12, fontWeight: 600, color: T.accent, textDecoration: 'none', border: `1px solid ${T.accentBorder}`, borderRadius: 100, padding: '6px 13px' }}>
+                Voir <IconChevron color={T.accent} size={10} />
+              </a>
+            </div>
+          </div>
         ))}
       </div>
     </section>
@@ -212,45 +190,76 @@ function LocalRecommendations({ marketId }: { marketId: string }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Vedette — mise en avant éditoriale d'un exposant (blend, pas de bannière)
+// SECTION 3 — « À ne pas manquer » — exposants boostés (exposant_boosts)
+// Priorité visuelle FORTE : plus grand, accent doré, distinct des pubs
 // ═══════════════════════════════════════════════════════════════════════
-function VedetteSlot({ marketId }: { marketId: string }) {
-  const [vedette, setVedette] = useState<VedetteData>(null)
+function ANePasManquer({ marketId }: { marketId: string }) {
+  const [boosts, setBoosts] = useState<BoostExposant[]>([])
   const [loading, setLoading] = useState(true)
+
   useEffect(() => {
     const load = async () => {
       try {
         const { createClient } = await import('@/lib/supabase')
         const supabase = createClient()
-        const { data } = await supabase.from('exposant_boosts').select('nom, offre, stand')
-          .eq('event_id', marketId).eq('status', 'active').order('created_at', { ascending: false }).limit(1).single()
-        if (data) setVedette(data)
+        const { data } = await supabase.from('exposant_boosts')
+          .select('nom, offre, stand, photo_url')
+          .eq('event_id', marketId).eq('status', 'active')
+          .order('created_at', { ascending: false }).limit(3)
+        if (data) setBoosts(data.map((b: any) => ({
+          nom: b.nom, offre: b.offre, stand: b.stand || '', photo_url: b.photo_url || '',
+        })))
       } catch (err) {}
       setLoading(false)
     }
     load()
   }, [marketId])
-  if (loading || !vedette) return null
+
+  if (loading || boosts.length === 0) return null
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
-      style={{ background: T.card, borderRadius: T.radiusSm, padding: '18px 20px', marginBottom: T.stack, boxShadow: T.shadowCard, display: 'flex', alignItems: 'center', gap: 14 }}>
-      <div style={{ width: 40, height: 40, borderRadius: 12, background: T.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <IconStar color={T.accent} size={17} />
+    <section>
+      <SectionHead
+        eyebrow="Boosté par Pulse Market"
+        title="À ne pas manquer"
+        aside={<IconStar color={T.gold} size={17} />}
+      />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {boosts.map((b, i) => (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'center', gap: 16,
+            background: `linear-gradient(135deg, ${T.goldSoft} 0%, ${T.card} 55%)`,
+            border: `1px solid #F0E4BE`,
+            borderRadius: T.radiusSm, padding: '16px 18px',
+            boxShadow: '0 6px 18px rgba(184,134,11,0.10)',
+          }}>
+            <div style={{ width: 62, height: 62, borderRadius: 14, overflow: 'hidden', flexShrink: 0, background: T.card, boxShadow: T.shadowCard }}>
+              {b.photo_url
+                ? <img src={b.photo_url} alt={b.nom} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><IconStar color={T.gold} size={22} /></div>
+              }
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                <IconStar color={T.gold} size={11} />
+                <p style={{ fontFamily: T.sans, fontSize: 15, fontWeight: 700, color: T.ink, lineHeight: 1.3 }}>{b.nom}</p>
+              </div>
+              <p style={{ fontFamily: T.sans, fontSize: 12.5, fontWeight: 400, color: T.body, lineHeight: 1.5 }}>
+                {b.offre}{b.stand ? ` · ${b.stand}` : ''}
+              </p>
+            </div>
+          </div>
+        ))}
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontFamily: T.sans, fontSize: 10.5, fontWeight: 600, color: T.accent, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3 }}>À ne pas manquer</p>
-        <p style={{ fontFamily: T.sans, fontSize: 15, fontWeight: 700, color: T.ink, marginBottom: 2 }}>{vedette.nom}</p>
-        <p style={{ fontFamily: T.sans, fontSize: 13, fontWeight: 400, color: T.body, lineHeight: 1.5 }}>{vedette.offre}{vedette.stand ? ` · ${vedette.stand}` : ''}</p>
-      </div>
-    </motion.div>
+    </section>
   )
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Exposants — liste horizontale scroll-snap, façon "hébergements similaires"
+// SECTION 4 — « Les exposants présents » — liste exhaustive, organique
+// Vertical, sobre, clairement distincte des sections partenaires au-dessus
 // ═══════════════════════════════════════════════════════════════════════
-function ExposantsRow({ marketId }: { marketId: string }) {
-  const [exposants, setExposants] = useState<Exposant[]>([])
+function ExposantsPresents({ marketId }: { marketId: string }) {
+  const [rows, setRows] = useState<ExposantRow[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -260,15 +269,15 @@ function ExposantsRow({ marketId }: { marketId: string }) {
         const supabase = createClient()
         const { data } = await supabase
           .from('applications')
-          .select('exposant_data:exposant_id(business_name, category, photo_url, ville, slug)')
+          .select('spot_label, exposant_data:exposant_id(business_name, category, produits, photo_url)')
           .eq('event_id', marketId)
           .in('status', ['paid', 'present'])
-          .limit(12)
+          .limit(50)
         if (data) {
           const list = data
-            .map((row: any) => row.exposant_data)
+            .map((row: any) => row.exposant_data ? { ...row.exposant_data, spot_label: row.spot_label } : null)
             .filter((e: any) => e && e.business_name)
-          setExposants(list)
+          setRows(list)
         }
       } catch (err) {}
       setLoading(false)
@@ -276,21 +285,31 @@ function ExposantsRow({ marketId }: { marketId: string }) {
     load()
   }, [marketId])
 
-  if (loading || exposants.length === 0) return null
+  if (loading || rows.length === 0) return null
   return (
-    <section style={{ marginBottom: T.stack }}>
-      <SectionHead eyebrow={`${exposants.length} sur ce marché`} title="Exposants" />
-      <div style={{ display: 'flex', gap: 14, overflowX: 'auto', scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch', margin: `0 -${T.gutter}px`, padding: `2px ${T.gutter}px 6px` }}>
-        {exposants.map((exp, i) => (
-          <div key={i} style={{ scrollSnapAlign: 'start', flexShrink: 0, width: 148 }}>
-            <div style={{ height: 148, borderRadius: T.radiusSm, overflow: 'hidden', marginBottom: 10, background: T.border, boxShadow: T.shadowCard }}>
+    <section>
+      <SectionHead eyebrow={`${rows.length} validé${rows.length > 1 ? 's' : ''} par la mairie`} title="Les exposants présents" />
+      <div style={{ background: T.card, borderRadius: T.radiusSm, boxShadow: T.shadowCard, overflow: 'hidden' }}>
+        {rows.map((exp, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderTop: i === 0 ? 'none' : `1px solid ${T.divider}` }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, overflow: 'hidden', flexShrink: 0, background: T.border }}>
               {exp.photo_url
                 ? <img src={exp.photo_url} alt={exp.business_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><IconShop size={24} /></div>
+                : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><IconShop size={17} /></div>
               }
             </div>
-            <p style={{ fontFamily: T.sans, fontSize: 13.5, fontWeight: 600, color: T.ink, lineHeight: 1.35, marginBottom: 2 }}>{exp.business_name}</p>
-            {exp.category && <p style={{ fontFamily: T.sans, fontSize: 12, fontWeight: 400, color: T.muted }}>{exp.category}</p>}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontFamily: T.sans, fontSize: 14, fontWeight: 600, color: T.ink, lineHeight: 1.35, marginBottom: 1 }}>{exp.business_name}</p>
+              <p style={{ fontFamily: T.sans, fontSize: 12, fontWeight: 400, color: T.muted, lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {exp.category || exp.produits || 'Exposant du marché'}
+              </p>
+            </div>
+            {exp.spot_label && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, background: T.bg, border: `1px solid ${T.border}`, borderRadius: 100, padding: '5px 11px' }}>
+                <IconTag size={11} />
+                <span style={{ fontFamily: T.sans, fontSize: 11.5, fontWeight: 600, color: T.body }}>{exp.spot_label}</span>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -299,7 +318,7 @@ function ExposantsRow({ marketId }: { marketId: string }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Carte flottante — style de référence pour toutes les cartes de marché
+// Carte flottante — pour la grille de la page d'accueil
 // ═══════════════════════════════════════════════════════════════════════
 function MarketCard({ market, index, onClick, large = false }: { market: Market; index: number; onClick: () => void; large?: boolean }) {
   const cd = fmt_countdown(market.start_date)
@@ -315,7 +334,6 @@ function MarketCard({ market, index, onClick, large = false }: { market: Market;
         <div style={{ position: 'relative', height: large ? 240 : 208, overflow: 'hidden' }}>
           <img src={cover} alt={market.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top,rgba(10,12,16,0.55) 0%,rgba(10,12,16,0.02) 55%,transparent 100%)' }} />
-
           <div style={{ position: 'absolute', top: 16, left: 16, right: 16, display: 'flex', justifyContent: 'space-between', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', borderRadius: 100, padding: '6px 12px', border: '1px solid rgba(255,255,255,0.22)' }}>
               {cd.dot && <span style={{ width: 5, height: 5, borderRadius: '50%', background: cd.color, display: 'block' }} />}
@@ -323,27 +341,21 @@ function MarketCard({ market, index, onClick, large = false }: { market: Market;
             </div>
             {market.distance !== undefined && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', borderRadius: 100, padding: '6px 12px', border: '1px solid rgba(255,255,255,0.22)' }}>
-                <IconSend size={11} />
-                <span style={{ fontFamily: T.sans, color: 'white', fontSize: 11.5, fontWeight: 500 }}>{fmt_dist(market.distance)}</span>
+                <IconSend size={11} /><span style={{ fontFamily: T.sans, color: 'white', fontSize: 11.5, fontWeight: 500 }}>{fmt_dist(market.distance)}</span>
               </div>
             )}
           </div>
-
           {market.sponsored && (
             <div style={{ position: 'absolute', bottom: 14, left: 16, display: 'flex', alignItems: 'center', gap: 6, background: T.accent, borderRadius: 100, padding: '5px 11px' }}>
-              <IconStar color="white" size={9} />
-              <span style={{ fontFamily: T.sans, color: 'white', fontSize: 10, fontWeight: 600, letterSpacing: '0.04em' }}>Sélection</span>
+              <IconStar color="white" size={9} /><span style={{ fontFamily: T.sans, color: 'white', fontSize: 10, fontWeight: 600, letterSpacing: '0.04em' }}>Sélection</span>
             </div>
           )}
         </div>
-
         <div style={{ padding: '18px 20px 20px' }}>
           <h2 style={{ fontFamily: T.sans, fontSize: large ? 19 : 17, fontWeight: 700, color: T.ink, lineHeight: 1.3, letterSpacing: '-0.01em', marginBottom: 6 }}>{market.title}</h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
-            <IconPin color={T.muted} size={12} />
-            <span style={{ fontFamily: T.sans, fontSize: 13, fontWeight: 400, color: T.body }}>{market.location_name}</span>
+            <IconPin color={T.muted} size={12} /><span style={{ fontFamily: T.sans, fontSize: 13, fontWeight: 400, color: T.body }}>{market.location_name}</span>
           </div>
-
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
             <div style={{ display: 'flex', gap: 18 }}>
               <div>
@@ -360,10 +372,8 @@ function MarketCard({ market, index, onClick, large = false }: { market: Market;
             </div>
           </div>
         </div>
-
         <div style={{ height: 3, background: T.border }}>
-          <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.9, delay: 0.3+index*0.05 }}
-            style={{ height: '100%', background: pct>80 ? '#F97066' : T.accent }} />
+          <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.9, delay: 0.3+index*0.05 }} style={{ height: '100%', background: pct>80 ? '#F97066' : T.accent }} />
         </div>
       </div>
     </motion.article>
@@ -371,17 +381,24 @@ function MarketCard({ market, index, onClick, large = false }: { market: Market;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Drawer « magique » — plein écran / 90vh, structuré façon fiche produit
+// MARKET DRAWER — cœur de la conversion
 // ═══════════════════════════════════════════════════════════════════════
 function MarketDrawer({ market, onClose }: { market: Market; onClose: () => void }) {
   const cd = fmt_countdown(market.start_date)
   const cover = market.cover_image || COVERS[0]
-  const occupied = market.total_spots - market.available_spots
   const mapsUrl = market.latitude && market.longitude
     ? `https://www.google.com/maps/dir/?api=1&destination=${market.latitude},${market.longitude}`
     : `https://www.google.com/maps/search/${encodeURIComponent(market.location_name)}`
   const y = useMotionValue(0)
   const opacity = useTransform(y, [0, 200], [1, 0])
+
+  // ── Gestion de scroll : mini bandeau compact qui apparaît proprement ──
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [compactHeader, setCompactHeader] = useState(false)
+  const onScroll = () => {
+    if (!scrollRef.current) return
+    setCompactHeader(scrollRef.current.scrollTop > 200)
+  }
 
   const handleShare = () => {
     if (navigator.share) {
@@ -400,15 +417,30 @@ function MarketDrawer({ market, onClose }: { market: Market; onClose: () => void
         transition={{ type: 'spring', damping: 32, stiffness: 320 }}
         onClick={e => e.stopPropagation()}>
 
-        <div style={{ padding: '12px 0 8px', display: 'flex', justifyContent: 'center', flexShrink: 0, background: T.bg, zIndex: 2 }}>
+        {/* Poignée de drag */}
+        <div style={{ padding: '12px 0 8px', display: 'flex', justifyContent: 'center', flexShrink: 0, background: T.bg, zIndex: 3 }}>
           <div style={{ width: 36, height: 4, borderRadius: 100, background: '#D8DBE0' }} />
         </div>
 
-        <div style={{ overflowY: 'auto', flex: 1 }}>
-          {/* En-tête immersif */}
-          <div style={{ height: 260, position: 'relative' }}>
+        {/* Bandeau compact — apparaît proprement au scroll, reste visible */}
+        <AnimatePresence>
+          {compactHeader && (
+            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.22 }}
+              style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 4, background: 'rgba(248,249,250,0.92)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderBottom: `1px solid ${T.border}`, padding: `14px ${T.gutter}px`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <p style={{ fontFamily: T.sans, fontSize: 15, fontWeight: 700, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{market.title}</p>
+              <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: '50%', background: T.card, border: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                <IconClose size={13} />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div ref={scrollRef} onScroll={onScroll} style={{ overflowY: 'auto', flex: 1 }}>
+
+          {/* ── 1. HEADER IMMERSIF ────────────────────────────────────── */}
+          <div style={{ height: 280, position: 'relative' }}>
             <img src={cover} alt={market.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top,rgba(10,12,16,0.62) 0%,transparent 60%)' }} />
+            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top,rgba(10,12,16,0.66) 0%,rgba(10,12,16,0.05) 55%,transparent 100%)' }} />
 
             <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, width: 34, height: 34, borderRadius: '50%', background: 'rgba(255,255,255,0.92)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
               <IconClose />
@@ -419,61 +451,51 @@ function MarketDrawer({ market, onClose }: { market: Market; onClose: () => void
               <span style={{ fontFamily: T.sans, color: cd.color, fontSize: 11.5, fontWeight: 500 }}>{cd.text}</span>
             </div>
 
-            <div style={{ position: 'absolute', bottom: 22, left: T.gutter, right: T.gutter }}>
-              <h1 style={{ fontFamily: T.sans, fontSize: 30, fontWeight: 800, color: 'white', lineHeight: 1.15, letterSpacing: '-0.02em' }}>{market.title}</h1>
+            <div style={{ position: 'absolute', bottom: 20, left: T.gutter, right: T.gutter }}>
+              <h1 style={{ fontFamily: T.sans, fontSize: 28, fontWeight: 800, color: 'white', lineHeight: 1.15, letterSpacing: '-0.02em', marginBottom: 10 }}>{market.title}</h1>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <IconPin color="rgba(255,255,255,0.8)" size={12} />
+                  <span style={{ fontFamily: T.sans, fontSize: 12.5, fontWeight: 400, color: 'rgba(255,255,255,0.85)' }}>{market.location_name}</span>
+                </div>
+                <div style={{ width: 3, height: 3, borderRadius: '50%', background: 'rgba(255,255,255,0.5)' }} />
+                <span style={{ fontFamily: T.sans, fontSize: 12.5, fontWeight: 400, color: 'rgba(255,255,255,0.85)' }}>
+                  {new Date(market.start_date).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* Contenu — beaucoup de padding externe, rien ne touche les bords */}
-          <div style={{ padding: `26px ${T.gutter}px 100px` }}>
+          <div style={{ padding: `22px ${T.gutter}px 100px` }}>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
-              <IconPin color={T.muted} size={13} />
-              <span style={{ fontFamily: T.sans, fontSize: 14, fontWeight: 400, color: T.body }}>{market.location_name}</span>
-              {market.distance !== undefined && (
-                <span style={{ fontFamily: T.sans, fontSize: 12, color: T.accent, fontWeight: 600, background: T.accentSoft, padding: '4px 11px', borderRadius: 100 }}>{fmt_dist(market.distance)}</span>
-              )}
-            </div>
-
-            {/* Zone d'action — boutons clairs et arrondis */}
-            <div style={{ display: 'flex', gap: 10, marginBottom: 28 }}>
+            {/* Bouton d'action très visible — priorité absolue */}
+            <div style={{ display: 'flex', gap: 10, marginBottom: T.stack }}>
               <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
-                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, background: T.accent, color: 'white', borderRadius: 100, padding: '15px', fontFamily: T.sans, fontSize: 14.5, fontWeight: 600, textDecoration: 'none', boxShadow: T.shadowFab, transition: 'transform 0.25s ease' }}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, background: T.accent, color: 'white', borderRadius: 100, padding: '16px', fontFamily: T.sans, fontSize: 15, fontWeight: 700, textDecoration: 'none', boxShadow: T.shadowFab, transition: 'transform 0.25s ease' }}
                 onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)' }}
                 onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)' }}>
-                <IconSend size={15} /> Itinéraire
+                <IconSend size={16} /> S'y rendre
               </a>
               <button onClick={handleShare}
-                style={{ width: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', background: T.card, border: `1px solid ${T.border}`, borderRadius: 100, cursor: 'pointer', flexShrink: 0 }}>
+                style={{ width: 54, display: 'flex', alignItems: 'center', justifyContent: 'center', background: T.card, border: `1px solid ${T.border}`, borderRadius: 100, cursor: 'pointer', flexShrink: 0, boxShadow: T.shadowCard }}>
                 <IconShare color={T.ink} size={16} />
               </button>
             </div>
 
-            {/* Faits clés — cartes flottantes, pas de filets rigides */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: T.stack }}>
-              {[
-                { label: 'Date', value: new Date(market.start_date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'}) },
-                { label: 'Heure', value: new Date(market.start_date).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) },
-                { label: 'Stands', value: `${occupied}/${market.total_spots}` },
-              ].map((s,i) => (
-                <div key={i} style={{ background: T.card, borderRadius: 16, padding: '16px 10px', textAlign: 'center', boxShadow: T.shadowCard }}>
-                  <p style={{ fontFamily: T.sans, fontSize: 10.5, fontWeight: 500, color: T.muted, marginBottom: 6 }}>{s.label}</p>
-                  <p style={{ fontFamily: T.sans, fontSize: 15, fontWeight: 700, color: T.ink }}>{s.value}</p>
-                </div>
-              ))}
-            </div>
-
-            <VedetteSlot marketId={market.id} />
-
             {market.description && (
-              <div style={{ marginBottom: T.stack }}>
-                <p style={{ fontFamily: T.sans, fontSize: 15, fontWeight: 400, color: T.body, lineHeight: 1.75 }}>{market.description}</p>
-              </div>
+              <p style={{ fontFamily: T.sans, fontSize: 14.5, fontWeight: 400, color: T.body, lineHeight: 1.75, marginBottom: T.stack }}>{market.description}</p>
             )}
 
-            {/* Listes horizontales scroll-snap */}
-            <ExposantsRow marketId={market.id} />
-            <LocalRecommendations marketId={market.id} />
+            {/* ── 2. BONS PLANS DU QUARTIER ─────────────────────────────── */}
+            <BonsPlansQuartier marketId={market.id} />
+            <Divider />
+
+            {/* ── 3. À NE PAS MANQUER ───────────────────────────────────── */}
+            <ANePasManquer marketId={market.id} />
+            <Divider />
+
+            {/* ── 4. LES EXPOSANTS PRÉSENTS ─────────────────────────────── */}
+            <ExposantsPresents marketId={market.id} />
 
           </div>
         </div>
@@ -545,19 +567,11 @@ export default function WhatmarketHome() {
   })
 
   const chip = (active: boolean): React.CSSProperties => ({
-    fontFamily: T.sans,
-    padding: '9px 16px',
-    borderRadius: 100,
-    border: `1px solid ${active ? T.accent : T.border}`,
-    cursor: 'pointer',
-    fontSize: 13,
-    fontWeight: 500,
-    whiteSpace: 'nowrap',
-    flexShrink: 0,
-    background: active ? T.accent : T.card,
-    color: active ? '#FFFFFF' : T.body,
-    transition: 'all 0.25s cubic-bezier(0.22,1,0.36,1)',
-    boxShadow: active ? '0 4px 12px rgba(14,165,233,0.22)' : 'none',
+    fontFamily: T.sans, padding: '9px 16px', borderRadius: 100,
+    border: `1px solid ${active ? T.accent : T.border}`, cursor: 'pointer',
+    fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', flexShrink: 0,
+    background: active ? T.accent : T.card, color: active ? '#FFFFFF' : T.body,
+    transition: 'all 0.25s cubic-bezier(0.22,1,0.36,1)', boxShadow: active ? '0 4px 12px rgba(14,165,233,0.22)' : 'none',
   })
 
   return (
@@ -576,7 +590,6 @@ export default function WhatmarketHome() {
 
       <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100vh', background: T.bg, position: 'relative', fontFamily: T.sans }}>
 
-        {/* ── EN-TÊTE ───────────────────────────────────────────────── */}
         <header style={{ position: 'sticky', top: 0, zIndex: 20, background: 'rgba(248,249,250,0.9)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', padding: `52px ${T.gutter}px 18px` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 22 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -586,7 +599,6 @@ export default function WhatmarketHome() {
               </svg>
               <span style={{ fontFamily: T.sans, fontSize: 20, fontWeight: 800, color: T.ink, letterSpacing: '-0.02em' }}>Whatmarket</span>
             </div>
-
             <button onClick={geoStatus==='idle'||geoStatus==='denied'?requestGeo:undefined}
               className={geoStatus==='requesting'?'pulse-ring':''}
               style={{
@@ -600,8 +612,7 @@ export default function WhatmarketHome() {
               }}>
               {geoStatus==='requesting'
                 ? <div style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
-                : <IconSend color={geoStatus==='ok' ? T.accent : 'white'} size={12} />
-              }
+                : <IconSend color={geoStatus==='ok' ? T.accent : 'white'} size={12} />}
               <span style={{ fontFamily: T.sans, fontSize: 12.5, fontWeight: 600, color: geoStatus==='ok' ? T.accent : 'white' }}>
                 {geoStatus==='ok' ? 'Localisé' : geoStatus==='requesting' ? 'Recherche…' : 'Autour de moi'}
               </span>
@@ -614,23 +625,18 @@ export default function WhatmarketHome() {
 
           <div style={{ display: 'flex', gap: 9, marginBottom: 12 }}>
             {(['bientot','proche','tous'] as const).map((f,i) => (
-              <button key={f} onClick={() => setFilter(f)} style={chip(filter===f)}>
-                {['Bientôt','Le plus proche','Tous'][i]}
-              </button>
+              <button key={f} onClick={() => setFilter(f)} style={chip(filter===f)}>{['Bientôt','Le plus proche','Tous'][i]}</button>
             ))}
           </div>
 
           <div style={{ display: 'flex', gap: 9, overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 2 }}>
             <button onClick={() => setSelectedRegion(null)} style={chip(!selectedRegion)}>Toute la France</button>
             {REGIONS.map(r => (
-              <button key={r.id} onClick={() => setSelectedRegion(selectedRegion === r.id ? null : r.id)} style={chip(selectedRegion === r.id)}>
-                {r.label}
-              </button>
+              <button key={r.id} onClick={() => setSelectedRegion(selectedRegion === r.id ? null : r.id)} style={chip(selectedRegion === r.id)}>{r.label}</button>
             ))}
           </div>
         </header>
 
-        {/* ── CORPS ─────────────────────────────────────────────────── */}
         <main style={{ padding: `${T.gutter}px ${T.gutter}px 120px` }}>
 
           <AnimatePresence>
@@ -644,23 +650,15 @@ export default function WhatmarketHome() {
                   <p style={{ fontFamily: T.sans, fontSize: 14.5, fontWeight: 700, color: T.ink, marginBottom: 3 }}>Marchés près de chez vous</p>
                   <p style={{ fontFamily: T.sans, fontSize: 12, fontWeight: 400, color: T.muted, lineHeight: 1.5 }}>Activez la géolocalisation pour voir les distances</p>
                 </div>
-                <button onClick={requestGeo}
-                  style={{ background: T.accent, color: 'white', border: 'none', borderRadius: 100, padding: '10px 16px', fontFamily: T.sans, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
-                  Activer
-                </button>
+                <button onClick={requestGeo} style={{ background: T.accent, color: 'white', border: 'none', borderRadius: 100, padding: '10px 16px', fontFamily: T.sans, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>Activer</button>
               </motion.div>
             )}
           </AnimatePresence>
 
           {selectedRegion && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22 }}>
-              <span style={{ fontFamily: T.sans, fontSize: 12.5, fontWeight: 400, color: T.muted }}>
-                {sorted.length} marché{sorted.length > 1 ? 's' : ''} en {regionLabel}
-              </span>
-              <button onClick={() => setSelectedRegion(null)}
-                style={{ marginLeft: 'auto', fontFamily: T.sans, fontSize: 12.5, color: T.accent, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
-                Effacer
-              </button>
+              <span style={{ fontFamily: T.sans, fontSize: 12.5, fontWeight: 400, color: T.muted }}>{sorted.length} marché{sorted.length > 1 ? 's' : ''} en {regionLabel}</span>
+              <button onClick={() => setSelectedRegion(null)} style={{ marginLeft: 'auto', fontFamily: T.sans, fontSize: 12.5, color: T.accent, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Effacer</button>
             </div>
           )}
 
@@ -668,19 +666,13 @@ export default function WhatmarketHome() {
             <div key={i} style={{ height: 300, borderRadius: T.radius, marginBottom: 22, background: 'linear-gradient(90deg,#EEF0F2 0%,#E4E7EB 40%,#EEF0F2 100%)', backgroundSize: '300% 100%', animation: 'shimmer 1.5s ease infinite' }} />
           ))}
 
-          {/* ── À LA UNE — carrousel horizontal ──────────────────────── */}
           {!loading && sponsoredMarket && !selectedRegion && (
             <section style={{ marginBottom: T.stack }}>
               <SectionHead eyebrow="Sponsorisé" title="À la une" />
-              <div style={{ margin: `0 -${T.gutter}px`, padding: `2px ${T.gutter}px 6px`, overflowX: 'auto' }}>
-                <div style={{ width: '100%' }}>
-                  <MarketCard market={sponsoredMarket} index={0} onClick={() => setSelected(sponsoredMarket)} large />
-                </div>
-              </div>
+              <MarketCard market={sponsoredMarket} index={0} onClick={() => setSelected(sponsoredMarket)} large />
             </section>
           )}
 
-          {/* ── GRILLE PROPRE ─────────────────────────────────────────── */}
           {!loading && sorted.length > 0 && (
             <section>
               <SectionHead eyebrow={`${sorted.length} résultat${sorted.length > 1 ? 's' : ''}`} title="Tous les marchés" />
@@ -697,22 +689,17 @@ export default function WhatmarketHome() {
               </div>
               <p style={{ fontFamily: T.sans, fontSize: 17, fontWeight: 700, color: T.ink, marginBottom: 8 }}>Aucun marché ici</p>
               <p style={{ fontFamily: T.sans, fontSize: 13, fontWeight: 400, color: T.muted, lineHeight: 1.6, marginBottom: 22 }}>Cette région n'a pas encore de marché publié.</p>
-              <button onClick={() => setSelectedRegion(null)}
-                style={{ fontFamily: T.sans, fontSize: 13, color: T.accent, background: T.accentSoft, border: 'none', borderRadius: 100, padding: '11px 22px', cursor: 'pointer', fontWeight: 600 }}>
-                Voir tous les marchés
-              </button>
+              <button onClick={() => setSelectedRegion(null)} style={{ fontFamily: T.sans, fontSize: 13, color: T.accent, background: T.accentSoft, border: 'none', borderRadius: 100, padding: '11px 22px', cursor: 'pointer', fontWeight: 600 }}>Voir tous les marchés</button>
             </div>
           )}
         </main>
 
-        {/* ── NAVIGATION ────────────────────────────────────────────── */}
         <nav style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 480, zIndex: 30, background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderTop: `1px solid ${T.border}`, padding: '14px 32px 28px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-around' }}>
             {NAV.map((item, i) => {
               const isActive = i === 0
               return (
-                <a key={i} href={item.href}
-                  style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, color: isActive ? T.accent : '#B4B9C0', transition: 'color 0.25s ease', padding: '2px 16px' }}>
+                <a key={i} href={item.href} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, color: isActive ? T.accent : '#B4B9C0', transition: 'color 0.25s ease', padding: '2px 16px' }}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={item.path} /></svg>
                   <span style={{ fontFamily: T.sans, fontSize: 10, fontWeight: isActive ? 600 : 500 }}>{item.label}</span>
                   {isActive && <span style={{ width: 3, height: 3, borderRadius: '50%', background: T.accent }} />}
