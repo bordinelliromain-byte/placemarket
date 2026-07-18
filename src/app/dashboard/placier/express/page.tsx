@@ -112,18 +112,29 @@ export default function PlacierExpress() {
     setPaymentUrl('')
 
     try {
-      const res = await fetch('/api/create-express-checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nom,
-          email,
-          siren,
-          montant,
-          eventTitle: todayEvent?.title || '',
-          eventId: todayEvent?.id || '',
-        }),
-      })
+      const supabase = createClient()
+const { data: { session } } = await supabase.auth.getSession()
+if (!session) {
+  setError('Session expirée, reconnecte-toi')
+  setGenerating(false)
+  return
+}
+
+const res = await fetch('/api/create-express-checkout', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${session.access_token}`,
+  },
+  body: JSON.stringify({
+    nom,
+    email,
+    siren,
+    montant,
+    eventTitle: todayEvent?.title || '',
+    eventId: todayEvent?.id || '',
+  }),
+})
       const data = await res.json()
       if (data.error) throw new Error(data.error)
       if (!data.url) throw new Error('Pas de lien de paiement retourné')

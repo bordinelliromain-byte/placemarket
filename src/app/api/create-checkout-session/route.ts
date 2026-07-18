@@ -2,6 +2,12 @@
 // ═════════════════════════════════════════════════════════════
 // PULSEMARKET — Create Checkout Session (AOT candidature)
 // Crée une session Stripe pour le paiement d'une candidature validée
+//
+// 🔧 FIX SÉCURITÉ : le montant n'est plus jamais reçu depuis le
+// client. Il est recalculé côté serveur à partir de events.price_per_spot,
+// la seule source de vérité. Avant ce fix, un exposant pouvait
+// modifier le montant envoyé par son navigateur et payer moins
+// cher que le vrai tarif du marché.
 // ═════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -19,11 +25,14 @@ import {
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
+// ─── Frais de service fixes (inchangé) ───
+const SERVICE_FEE_CENTS = 200 // 2€
+
 // ─── Schéma Zod strict ───
+// ✅ FIX : "amount" a été retiré du schéma. On ne fait plus jamais
+// confiance à un montant envoyé par le client pour un paiement.
 const checkoutSchema = z.object({
   candidatureId: uuidSchema,
-  eventTitle: z.string().trim().min(1).max(200),
-  amount: z.number().min(1, 'Montant minimum 1€').max(10000, 'Montant maximum 10 000€'),
   exposantEmail: emailSchema,
   exposantNom: z.string().trim().min(1).max(200).optional(),
 })
@@ -68,7 +77,7 @@ export async function POST(req: NextRequest) {
     // ─── 3. Validation Zod ───
     const result = await validateBody(req, checkoutSchema)
     if (result instanceof NextResponse) return result
-    const { candidatureId, eventTitle, amount, exposantEmail, exposantNom } = result
+    const { candidatureId, exposantEmail, exposantNom } = result
 
     // ─── 4. Client Supabase admin ───
     const supabase = createClient(
@@ -78,9 +87,22 @@ export async function POST(req: NextRequest) {
     )
 
     // ─── 5. Vérifier que la candidature existe ET est validée ───
+    // ✅ FIX : on récupère aussi events.price_per_spot et events.title
+    // dans la MÊME requête, directement depuis la base — c'est cette
+    // valeur, et uniquement celle-ci, qui servira à calculer le prix.
     const { data: candidature, error: dbError } = await supabase
       .from('applications')
-      .select('id, status, event_id, exposant_id')
+      .select(`
+        id,
+        status,
+        event_id,
+        exposant_id,
+        events:event_id (
+          title,
+          price_per_spot,
+          status
+        )
+      `)
       .eq('id', candidatureId)
       .single()
 
@@ -101,7 +123,6 @@ export async function POST(req: NextRequest) {
         }
       })
 
-      // ✅ Message différent selon statut
       let errorMsg = 'Candidature non validée'
       if (candidature.status === 'paid') errorMsg = 'Cette candidature a déjà été payée'
       else if (candidature.status === 'rejected') errorMsg = 'Cette candidature a été refusée'
@@ -110,8 +131,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: errorMsg }, { status: 403 })
     }
 
-    // ─── 7. ✅ Anti-doublon : vérifier qu'aucune session Stripe active n'existe ───
-    // (optionnel mais évite les sessions multiples si l'user clique 2x)
+    // ─── 7. ✅ FIX PRINCIPAL : le prix vient EXCLUSIVEMENT de la base ───
+    const event = (candidature as any).events
+    const eventTitle: string = event?.title || 'Marché'
+    const pricePerSpot: number = Number(event?.price_per_spot ?? 0)
+
+    if (!pricePerSpot || pricePerSpot <= 0) {
+      console.error('[create-checkout] price_per_spot invalide pour event', candidature.event_id)
+      return NextResponse.json({
+        error: 'Tarif introuvable pour ce marché. Contactez l\'organisateur.'
+      }, { status: 400 })
+    }
+
+    // Sécurité additionnelle : borne raisonnable pour éviter une valeur
+    // aberrante en base (même si elle vient de nous, on se protège)
+    if (pricePerSpot > 10000) {
+      console.error('[create-checkout] price_per_spot suspect (>10000€) pour event', candidature.event_id)
+      return NextResponse.json({ error: 'Configuration tarifaire invalide' }, { status: 500 })
+    }
+
+    const amountCents = Math.round(pricePerSpot * 100)
 
     // ─── 8. Création session Stripe ───
     let session: Stripe.Checkout.Session
@@ -130,7 +169,7 @@ export async function POST(req: NextRequest) {
                   ? `Emplacement marché · ${exposantNom.substring(0, 100)}`
                   : 'Emplacement marché',
               },
-              unit_amount: Math.round(amount * 100), // Stripe attend des centimes
+              unit_amount: amountCents,
             },
             quantity: 1,
           },
@@ -141,7 +180,7 @@ export async function POST(req: NextRequest) {
                 name: 'Frais de service PulseMarket',
                 description: 'Gestion candidature + vérification dossier',
               },
-              unit_amount: 200, // 2€ en centimes
+              unit_amount: SERVICE_FEE_CENTS,
             },
             quantity: 1,
           },
@@ -150,10 +189,11 @@ export async function POST(req: NextRequest) {
           candidatureId,
           exposantNom: (exposantNom || '').substring(0, 500),
           eventTitle: eventTitle.substring(0, 500),
+          // ✅ On garde une trace du prix appliqué pour l'audit / support
+          pricePerSpotCents: String(amountCents),
         },
         success_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/paiement-success?session_id={CHECKOUT_SESSION_ID}&candidature_id=${candidatureId}`,
         cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard`,
-        // ✅ Expiration session (30 minutes par défaut, on peut réduire)
         expires_at: Math.floor(Date.now() / 1000) + 30 * 60, // 30 min
       })
     } catch (stripeErr: any) {
@@ -171,7 +211,7 @@ export async function POST(req: NextRequest) {
       details: {
         candidatureId,
         eventTitle,
-        amount,
+        amount: pricePerSpot,
         sessionId: session.id
       }
     })

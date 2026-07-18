@@ -3,10 +3,16 @@
 // PULSEMARKET — Create Express Checkout (paiement placier rapide)
 // Crée une session Stripe pour un paiement express sur le terrain
 // Utilisé par les placiers quand un forain arrive sans candidature
+//
+// 🔧 FIX SÉCURITÉ : cette route ne vérifiait pas du tout qui
+// l'appelait — n'importe qui connaissant l'URL pouvait générer des
+// liens de paiement en se faisant passer pour PulseMarket. Elle
+// exige maintenant une session valide avec le rôle "placier".
 // ═════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
+import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { securityLog } from '@/lib/securityLog'
 import {
@@ -33,6 +39,39 @@ const expressCheckoutSchema = z.object({
   eventId: z.string().max(100).optional(),
 })
 
+// ─── ✅ FIX : vérifie que l'appelant est bien un placier connecté ───
+async function requirePlacier(req: NextRequest): Promise<
+  { userId: string; mairieId: string | null } | null
+> {
+  const authHeader = req.headers.get('authorization') || ''
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
+  if (!token) return null
+
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    console.error('[create-express-checkout] Env vars manquantes')
+    return null
+  }
+
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+
+  const { data: userData, error: userError } = await supabase.auth.getUser(token)
+  if (userError || !userData?.user) return null
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role, mairie_id')
+    .eq('id', userData.user.id)
+    .single()
+
+  if (profile?.role !== 'placier') return null
+
+  return { userId: userData.user.id, mairieId: profile.mairie_id }
+}
+
 // ═════════════════════════════════════════════════════════════
 // POST /api/create-express-checkout
 // ═════════════════════════════════════════════════════════════
@@ -56,7 +95,18 @@ export async function POST(req: NextRequest) {
       return limited
     }
 
-    // ─── 2. Vérifier env vars critiques ───
+    // ─── 2. ✅ FIX : authentification placier obligatoire ───
+    const placier = await requirePlacier(req)
+    if (!placier) {
+      await securityLog({
+        action: 'acces_non_autorise',
+        ip,
+        details: { reason: 'placier_non_authentifie', route: 'create-express-checkout' }
+      })
+      return NextResponse.json({ error: 'Non autorisé — connectez-vous en tant que placier' }, { status: 401 })
+    }
+
+    // ─── 3. Vérifier env vars critiques ───
     if (!process.env.STRIPE_SECRET_KEY) {
       console.error('[create-express-checkout] STRIPE_SECRET_KEY manquant')
       return NextResponse.json({ error: 'Configuration serveur invalide' }, { status: 500 })
@@ -66,14 +116,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Configuration serveur invalide' }, { status: 500 })
     }
 
-    // ─── 3. Validation Zod ───
+    // ─── 4. Validation Zod ───
     const result = await validateBody(req, expressCheckoutSchema)
     if (result instanceof NextResponse) return result
     const { nom, email, montant, eventTitle, eventId } = result
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL
 
-    // ─── 4. Créer la session Stripe ───
+    // ─── 5. Créer la session Stripe ───
     let session: Stripe.Checkout.Session
     try {
       session = await stripe.checkout.sessions.create({
@@ -99,6 +149,8 @@ export async function POST(req: NextRequest) {
           email: email.substring(0, 500),
           eventId: (eventId || '').substring(0, 500),
           eventTitle: (eventTitle || '').substring(0, 500),
+          // ✅ On trace maintenant QUEL placier a généré ce paiement
+          placierId: placier.userId,
         },
         expires_at: Math.floor(Date.now() / 1000) + 30 * 60, // 30 min
       })
@@ -109,10 +161,11 @@ export async function POST(req: NextRequest) {
       }, { status: 502 })
     }
 
-    // ─── 5. Log paiement initié ───
+    // ─── 6. Log paiement initié (avec l'identité du placier) ───
     await securityLog({
       action: 'paiement_initie',
       ip,
+      userId: placier.userId,
       details: {
         type: 'express',
         nom,
