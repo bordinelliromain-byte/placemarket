@@ -56,19 +56,10 @@ export async function GET(req: NextRequest) {
             }).catch(err => console.error('Email bienvenue error:', err))
 
           } else if (profile.role === 'organisateur') {
-            // ─── BIENVENUE MAIRIE ───
-            await fetch(`${origin}/api/send-email`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                type: 'bienvenue_mairie',
-                to: userEmail,
-                data: {
-                  nom: fullName,
-                  organisationNom: profile.organisation_name || fullName
-                }
-              })
-            }).catch(err => console.error('Email bienvenue_mairie error:', err))
+            // ─── PAS d'email ici : la mairie est encore "pending" à ce stade
+            // (confirmation d'adresse email uniquement, pas validation métier).
+            // L'email "mairie_validee" part depuis /api/admin/approve-mairie
+            // au moment de la vraie validation manuelle par l'admin. ───
 
           } else if (profile.role === 'placier') {
             // ─── BIENVENUE PLACIER (avec nom de la mairie) ───
@@ -101,8 +92,14 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      // ✅ Redirige vers /auth?confirmed=true pour afficher le message
-      return NextResponse.redirect(`${origin}/auth?confirmed=true`)
+      // ✅ Redirige vers la page auth correspondant au rôle du compte
+      const redirectPath = profile?.role === 'organisateur'
+        ? '/auth/mairie?confirmed=true'
+        : profile?.role === 'placier'
+          ? '/auth/placier?confirmed=true'
+          : '/auth?confirmed=true'
+
+      return NextResponse.redirect(`${origin}${redirectPath}`)
     }
   }
 
