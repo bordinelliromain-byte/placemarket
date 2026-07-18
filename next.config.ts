@@ -103,7 +103,8 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline' https://client.crisp.chat https://fonts.googleapis.com https://unpkg.com",
 
               // Images (avec Esri pour les tuiles satellite + Wikipedia pour blasons mairie)
-              "img-src 'self' data: blob: https://*.supabase.co https://client.crisp.chat https://*.crisp.chat https://image.crisp.chat https://images.unsplash.com https://maps.googleapis.com https://maps.gstatic.com https://*.googleapis.com https://api.qrserver.com https://*.tile.openstreetmap.org https://unpkg.com https://server.arcgisonline.com https://*.arcgisonline.com https://upload.wikimedia.org https://commons.wikimedia.org",
+              // Images (avec Esri pour les tuiles satellite + Wikipedia pour blasons mairie + CartoDB pour la carte Whatmarket)
+"img-src 'self' data: blob: https://*.supabase.co https://client.crisp.chat https://*.crisp.chat https://image.crisp.chat https://images.unsplash.com https://maps.googleapis.com https://maps.gstatic.com https://*.googleapis.com https://api.qrserver.com https://*.tile.openstreetmap.org https://unpkg.com https://server.arcgisonline.com https://*.arcgisonline.com https://upload.wikimedia.org https://commons.wikimedia.org https://*.basemaps.cartocdn.com",
 
               // Fonts
               "font-src 'self' https://client.crisp.chat https://fonts.gstatic.com data:",
