@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
 
     let query = supabase
       .from('profiles')
-      .select('id, email, organisation_name, organisation_siret, organisateur_status, created_at, justificatif_url, plan')
+      .select('id, email, full_name, organisation_name, organisation_siret, organisateur_status, created_at, justificatif_url, plan')
       .eq('role', 'organisateur')
       .order('created_at', { ascending: false })
 

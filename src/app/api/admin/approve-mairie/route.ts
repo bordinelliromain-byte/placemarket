@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('id, email, role, organisateur_status, organisation_name')
+      .select('id, email, role, organisateur_status, organisation_name, full_name')
       .eq('id', userId)
       .single()
 
@@ -54,6 +54,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Erreur mise à jour' }, { status: 500 })
     }
 
+    const displayName = profile.organisation_name || profile.full_name || ''
+
     try {
       await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/send-email`, {
         method: 'POST',
@@ -62,8 +64,8 @@ export async function POST(req: NextRequest) {
           type: action === 'approve' ? 'mairie_validee' : 'mairie_refusee',
           to: profile.email,
           data: {
-            nom: profile.organisation_name || '',
-            mairieNom: profile.organisation_name || '',
+            nom: displayName,
+            mairieNom: displayName,
             dashboardUrl: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/organisateur`,
           },
         }),
@@ -75,7 +77,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       status: newStatus,
-      organisation: profile.organisation_name,
+      organisation: displayName,
       email: profile.email,
     })
 

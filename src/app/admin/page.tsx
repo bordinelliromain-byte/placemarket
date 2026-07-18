@@ -179,7 +179,7 @@ function MairiesTab() {
             <div key={m.id} style={{ padding: '14px 18px', borderBottom: i < mairies.length - 1 ? '1px solid #F1F5F9' : 'none', display: 'flex', alignItems: 'center', gap: 14 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>{m.organisation_name || '—'}</p>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>{m.organisation_name || m.full_name || '—'}</p>
                   {statusBadge(m.organisateur_status)}
                 </div>
                 <p style={{ fontSize: 12, color: '#94A3B8' }}>{m.email} · SIRET {m.organisation_siret || '—'}</p>
