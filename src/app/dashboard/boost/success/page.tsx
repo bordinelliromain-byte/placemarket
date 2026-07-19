@@ -74,10 +74,6 @@ function BoostExposantSuccessContent() {
               style={{ flex: 1, background: '#25D366', color: 'white', textDecoration: 'none', borderRadius: 10, padding: '10px', fontSize: 12, fontWeight: 700, textAlign: 'center', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
               <MessageCircle size={12} /> WhatsApp
             </a>
-            <button onClick={() => router.push('/dashboard/partage')}
-              style={{ flex: 1, background: 'linear-gradient(135deg, #E1306C, #833AB4)', color: 'white', border: 'none', borderRadius: 10, padding: '10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-              <Share2 size={12} /> Partage
-            </button>
           </div>
         </div>
 

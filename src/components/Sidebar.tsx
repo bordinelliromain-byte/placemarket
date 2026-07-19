@@ -15,7 +15,6 @@ const NAV_EXPOSANT = [
   { icon: <Map size={15} />, label: 'Marchés', path: '/dashboard/evenements' },
   { icon: <FileText size={15} />, label: 'Documents', path: '/dashboard/profil' },
   { icon: <Star size={15} />, label: 'Booster', path: '/dashboard/boost' },
-  { icon: <Share2 size={15} />, label: 'Partager', path: '/dashboard/partage' },
   { icon: <Receipt size={15} />, label: 'Factures', path: '/dashboard/factures' },
   { icon: <Settings size={15} />, label: 'Paramètres', path: '/dashboard/parametres' },
 ]
@@ -24,7 +23,6 @@ const NAV_ORGANISATEUR = [
   { icon: <LayoutDashboard size={15} />, label: 'Dashboard', path: '/dashboard' },
   { icon: <Map size={15} />, label: 'Marchés', path: '/dashboard/creer-evenement' },
   { icon: <FileText size={15} />, label: 'Candidatures', path: '/dashboard/candidatures' },
-  { icon: <MapPin size={15} />, label: 'Attribution', path: '/dashboard/organisateur/attribution' },
   { icon: <QrCode size={15} />, label: 'Scanner', path: '/dashboard/organisateur/scanner' },
   { icon: <Receipt size={15} />, label: 'Trésorerie', path: '/dashboard/tresorerie' },
   { icon: <Users size={15} />, label: 'Placiers', path: '/dashboard/organisateur/placiers' },

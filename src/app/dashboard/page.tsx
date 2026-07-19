@@ -532,10 +532,6 @@ function DashboardContent() {
                                 style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#0F172A', color: 'white', border: 'none', borderRadius: 8, padding: '9px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
                                 <FileText size={12} /> Télécharger mon AOT
                             </button>
-                            <button onClick={() => router.push(`/dashboard/partage?eventName=${encodeURIComponent(c.events?.title || '')}&eventDate=${encodeURIComponent(new Date(c.events?.start_date).toLocaleDateString('fr-FR'))}&eventLocation=${encodeURIComponent(c.events?.location_name || '')}`)}
-                                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'linear-gradient(135deg, #E1306C, #833AB4)', color: 'white', border: 'none', borderRadius: 8, padding: '9px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
-                                  <Share2 size={12} /> Partager
-                            </button>
                           </div>
                         )}
                         </div>

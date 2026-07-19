@@ -264,10 +264,6 @@ export default function MesMarches() {
                               <Navigation size={12} /> {isMobile ? 'GPS' : 'Itinéraire'}
                             </a>
                           )}
-                          <button onClick={() => router.push(`/dashboard/partage?eventName=${encodeURIComponent(c.events?.title || '')}&eventDate=${encodeURIComponent(formatDate(c.events.start_date))}&eventLocation=${encodeURIComponent(c.events?.location_name || '')}`)}
-                            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'linear-gradient(135deg, #E1306C, #833AB4)', color: 'white', border: 'none', borderRadius: 8, padding: '8px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
-                            <Share2 size={12} /> {isMobile ? 'Share' : 'Partager'}
-                          </button>
                         </div>
                       </motion.div>
                     )

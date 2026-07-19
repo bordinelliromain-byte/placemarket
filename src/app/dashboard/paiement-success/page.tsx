@@ -7,8 +7,8 @@ import { motion } from 'framer-motion'
 import { openFacturePDF } from '@/lib/generateFacture'
 import {
   CheckCircle, FileText, ArrowLeft, Loader, MapPin,
-  Share2, Calendar, Mail, Navigation, Sparkles,
-  QrCode, Clock, ArrowRight
+  Calendar, Mail, Navigation, Sparkles,
+  QrCode, Clock
 } from 'lucide-react'
 
 const BRAND = '#4F46E5'
@@ -130,11 +130,6 @@ function PaiementSuccessContent() {
     })
   }
 
-  const handlePartager = () => {
-    if (!candidature) return
-    router.push(`/dashboard/partage?eventName=${encodeURIComponent(candidature.events?.title || '')}&eventDate=${encodeURIComponent(new Date(candidature.events?.start_date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }))}&eventLocation=${encodeURIComponent(candidature.events?.location_name || '')}`)
-  }
-
   if (loading) return (
     <div style={{ minHeight: '100vh', background: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
@@ -228,15 +223,6 @@ function PaiementSuccessContent() {
                 actionLabel: 'Télécharger',
               },
               {
-                icon: <Share2 size={14} />,
-                title: 'Partager votre participation',
-                desc: 'Annoncez-le à vos clients sur Instagram, WhatsApp...',
-                done: false,
-                action: handlePartager,
-                actionLabel: 'Créer le visuel',
-                highlight: true,
-              },
-              {
                 icon: <Navigation size={14} />,
                 title: 'Itinéraire le jour J',
                 desc: hasCoords ? 'Cliquez pour ouvrir Google Maps' : 'À retrouver dans Mes marchés',
@@ -264,15 +250,6 @@ function PaiementSuccessContent() {
               </div>
             ))}
           </div>
-        </motion.div>
-
-        {/* ✅ Bouton Partager hero */}
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4, duration: 0.4 }} style={{ marginBottom: 12 }}>
-          <button onClick={handlePartager}
-            style={{ width: '100%', background: 'linear-gradient(135deg, #E1306C, #833AB4)', color: 'white', border: 'none', borderRadius: 12, padding: '14px 0', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 4px 20px rgba(225,48,108,0.25)' }}>
-            <Share2 size={16} /> Annoncer ma participation
-            <ArrowRight size={14} />
-          </button>
         </motion.div>
 
         {/* Actions secondaires */}
