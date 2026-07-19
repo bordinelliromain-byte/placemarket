@@ -1,5 +1,11 @@
 import { MetadataRoute } from 'next'
 
+// 🔧 FIX — ce fichier sert le robots.txt pour TOUS les domaines qui
+// pointent vers cette app (pulse-market.fr ET whatmarket.fr), mais il
+// ne déclarait que le sitemap et le host de pulse-market.fr. Un robot
+// qui visite whatmarket.fr/robots.txt tombait donc sur des infos
+// concernant l'autre domaine. On déclare maintenant les deux sitemaps.
+
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
@@ -47,7 +53,14 @@ export default function robots(): MetadataRoute.Robots {
         disallow: '/',
       },
     ],
-    sitemap: 'https://pulse-market.fr/sitemap.xml',
-    host: 'https://pulse-market.fr',
+    // ✅ Les deux sitemaps, un par produit/domaine
+    sitemap: [
+      'https://pulse-market.fr/sitemap.xml',
+      'https://whatmarket.fr/whatmarket/sitemap.xml',
+    ],
+    // ⚠️ NOTE : la directive "host" n'est de toute façon plus prise en
+    // compte par Google depuis 2019 (elle ne l'a jamais été que par
+    // Yandex). On la retire plutôt que de choisir arbitrairement un
+    // domaine — inutile de trancher entre les deux ici.
   }
 }
