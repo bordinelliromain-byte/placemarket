@@ -276,9 +276,14 @@ export default function Candidatures() {
   }
 
   // ✅ Reject avec motif sauvé en DB + envoyé par email
+  // 🔧 FIX — si la candidature était déjà "validated" (place déjà décomptée
+  // via decrement_available_spots), on la restitue avec increment_available_spots.
+  // Avant ce fix, valider puis refuser une candidature faisait perdre une
+  // place au marché pour toujours, sans jamais la récupérer.
   const handleReject = async (id: string) => {
     setUpdating(id)
     const reason = rejectReason.trim() || 'Dossier non retenu'
+    const candidature = allCandidatures.find(c => c.id === id)
 
     await supabase.from('applications').update({
       status: 'rejected',
@@ -286,10 +291,19 @@ export default function Candidatures() {
       rejected_at: new Date().toISOString(),
     }).eq('id', id)
 
+    // ✅ Restitue la place si elle avait été décomptée
+    if (candidature?.status === 'validated' && candidature?.event_id) {
+      await supabase.rpc('increment_available_spots', { event_id: candidature.event_id })
+      setEvents(prev => prev.map(e =>
+        e.id === candidature.event_id
+          ? { ...e, available_spots: (e.available_spots || 0) + 1 }
+          : e
+      ))
+    }
+
     setAllCandidatures(prev => prev.map(c => c.id === id ? { ...c, status: 'rejected', rejection_reason: reason } : c))
     if (slideOver?.id === id) setSlideOver((prev: any) => ({ ...prev, status: 'rejected', rejection_reason: reason }))
 
-    const candidature = allCandidatures.find(c => c.id === id)
     // ✅ Email avec motif
     if (candidature?.profiles?.email) {
       try {
