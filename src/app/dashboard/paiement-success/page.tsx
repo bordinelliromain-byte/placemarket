@@ -17,7 +17,6 @@ function PaiementSuccessContent() {
   const [loading, setLoading] = useState(true)
   const [candidature, setCandidature] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
-  const [updateError, setUpdateError] = useState<string | null>(null)
   const searchParams = useSearchParams()
   const router = useRouter()
   const supabase = createClient()
@@ -34,14 +33,12 @@ function PaiementSuccessContent() {
       setProfile(profileData)
 
       if (candidatureId) {
-        const { error: updateErr } = await supabase
-          .from('applications')
-          .update({ status: 'paid' })
-          .eq('id', candidatureId)
-
-        if (updateErr) {
-          setUpdateError(updateErr.message)
-        }
+        // 🔧 FIX — on ne tente plus de passer status='paid' ici.
+        // Le vrai statut est posé par le webhook Stripe (service_role),
+        // seul habilité à le faire — un exposant n'a pas le droit de
+        // modifier sa propre candidature (RLS), donc cette tentative
+        // échouait à chaque fois et affichait une erreur sur la page
+        // de confirmation, juste après un paiement pourtant réussi.
 
         // ✅ Récupère candidature + event + mairie en 1 seule requête
         const { data: app } = await supabase
@@ -174,12 +171,6 @@ function PaiementSuccessContent() {
             Votre place est réservée pour{' '}
             <strong style={{ color: '#0F172A' }}>{candidature?.events?.title || 'l\'événement'}</strong>
           </p>
-
-          {updateError && (
-            <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#DC2626' }}>
-              Erreur : {updateError}
-            </div>
-          )}
 
           {/* Countdown */}
           {daysUntil !== null && daysUntil > 0 && (

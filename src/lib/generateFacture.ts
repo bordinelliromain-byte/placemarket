@@ -1,6 +1,24 @@
 // lib/generateFacture.ts
 import QRCode from 'qrcode'
 
+// 🔧 FIX CRITIQUE — cette facture (la vraie, celle de la redevance AOT)
+// affichait un SIRET et un numéro de TVA à zéros ("000 000 000 00000" /
+// "FR00000000000") au lieu des vraies informations légales de
+// PulseMarket SAS. Toute facture générée avant ce fix contient un faux
+// numéro d'immatriculation — à corriger d'urgence si des exposants ont
+// déjà reçu ce document.
+
+const ISSUER = {
+  name: 'PulseMarket SAS',
+  siren: '105 506 554',
+  rcs: 'RCS Draguignan',
+  vat: 'FR8302105506554',
+  address: '661 Carreirade des Adrets',
+  postalCity: '83640 Plan-d\'Aups-Sainte-Baume',
+  email: 'romain@pulse-market.fr',
+  site: 'pulse-market.fr',
+}
+
 export interface FactureData {
   candidatureId: string
   exposantNom: string
@@ -103,7 +121,7 @@ export async function generateFactureHTML(data: FactureData): Promise<string> {
           <div class="logo-box"><span class="logo-text">PM</span></div>
           <span class="brand-name">PulseMarket</span>
         </div>
-        <div class="brand-sub">Plateforme de gestion des marchés · PulseMarket.fr</div>
+        <div class="brand-sub">Plateforme de gestion des marchés · pulse-market.fr</div>
         ${data.mairieNom ? `<div style="margin-top: 8px; font-size: 12px; color: #475569; font-weight: 600;">Pour le compte de : ${data.mairieNom}</div>` : ''}
       </div>
       <div class="facture-title">
@@ -118,12 +136,12 @@ export async function generateFactureHTML(data: FactureData): Promise<string> {
     <div class="parties">
       <div>
         <div class="partie-label">Émetteur</div>
-        <div class="partie-name">PulseMarket SAS</div>
+        <div class="partie-name">${ISSUER.name}</div>
         <div class="partie-detail">
-          Plateforme numérique de gestion AOT<br>
-          SIRET : 000 000 000 00000<br>
-          contact@PulseMarket.fr<br>
-          PulseMarket.fr
+          ${ISSUER.address}, ${ISSUER.postalCity}<br>
+          SIREN : ${ISSUER.siren} — ${ISSUER.rcs}<br>
+          TVA intracommunautaire : ${ISSUER.vat}<br>
+          ${ISSUER.email} · ${ISSUER.site}
         </div>
       </div>
       <div>
@@ -180,7 +198,7 @@ export async function generateFactureHTML(data: FactureData): Promise<string> {
       </div>
     </div>
     <div class="ref-bar">
-      <span>PulseMarket SAS · SIRET 000 000 000 00000 · TVA FR00000000000</span>
+      <span>${ISSUER.name} · SIREN ${ISSUER.siren} · TVA ${ISSUER.vat}</span>
       <span>${factureNum} · ${dateEmission}</span>
     </div>
   </div>
